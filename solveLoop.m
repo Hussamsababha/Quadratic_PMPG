@@ -3,11 +3,11 @@ clc; clear; close all
 
 %% fixed pars:
 load constraintsFD.mat
-nx = 200;
-ny = 200; 
-n = 201; 
-tf = 5; 
-dt = 0.0005; 
+nx = 100;
+ny = 100; 
+n = 101; 
+tf = 1; 
+dt = 0.001; 
 lx = 1; 
 ly = 1; 
 nsteps = 20; 
@@ -28,30 +28,6 @@ U(n, :) = 1 ;% - ((cosh(C0.*(X(end, :) - 0.5)))/(cosh(0.5*C0)));
 x0 = [];
 
 % plot(X(end, :), U(end, :))
-
-% % Define video writer objects
-% velocityVideo = VideoWriter('VelocityVideo_Re100.avi');  % Velocity video file
-% accelerationVideo = VideoWriter('AccelerationVideo_Req100.avi');  % Acceleration video file
-% 
-% % Set frame rate (optional)
-% velocityVideo.FrameRate = 10;
-% accelerationVideo.FrameRate = 10;
-% 
-% % Open video files for writing
-% open(velocityVideo);
-% open(accelerationVideo);
-
-% Define folder paths for saving figures
-velocityFolder = 'velocityMidD_figures';  % Folder for velocity plots
-accelerationFolder = 'accelerationMidD_figures';  % Folder for acceleration plots
-
-% Create folders if they do not exist
-if ~exist(velocityFolder, 'dir')
-    mkdir(velocityFolder);
-end
-if ~exist(accelerationFolder, 'dir')
-    mkdir(accelerationFolder);
-end
 
 % x0 = zeros(n_vars, 1);
 for i = 1:nt
@@ -93,86 +69,18 @@ U = U + dt(i).* Ut;
 V = V + dt(i).* Vt;
 U_mag = sqrt(U.^2 + V.^2);
 
-
-% if i==1|floor(nsteps*i/nt)>floor(nsteps*(i-1)/nt)
-% %         % Create the velocity plot
-%         figure;
-%         surf(X, Y, U, 'LineStyle', 'none');
-%         view(2);
-%         % title(['Iteration ', num2str(i), ' - Velocity']);
-%         colormap jet
-% %         caxis([0 1])
-%         % Save the figure as a .fig file
-% %         savefig(fullfile(velocityFolder, ['velocity_iteration_', num2str(i), '.fig']));
-% 
-%         figure;
-%         surf(X, Y, V, 'LineStyle', 'none');
-%         view(2);
-%         % title(['Iteration ', num2str(i), ' - Velocity']);
-%         colormap jet
-% %         caxis([0 1])
-%         % Save the figure as a .fig file
-% %         savefig(fullfile(velocityFolder, ['velocity_iteration_', num2str(i), '.fig']));
-% 
-        figure;
-        surf(X, Y, sqrt(U.^2 + V.^2), 'LineStyle', 'none');
-        view(2);
-        title(['Iteration ', num2str(i), ' - Local Acceleration']);
-        colormap jet
-        colorbar
-      % caxis([0 5])
-% %         savefig(fullfile(accelerationFolder, ['acceleration_iteration_', num2str(i), '.fig']));
-% %         % Capture the frame
-% %         frame = getframe(gcf);
-% %         writeVideo(velocityVideo, frame);  % Write to velocity video
-% %         close(gcf);  % Close the figure to save memory
-% %         % Create the line plot
-% %         figure;
-% %         plot(Y(:, 50), Ut_mag(:, 100));
-% %         view(2);
-% % %       title(['Iteration ', num2str(i), ' - Local Acceleration']);
-% %         colormap jet
-% % %       colorbar
-% % %         caxis([0 5])
-%         % Save the figure as a .fig file
-% %         close all
-% %         % Capture the frame
-% %         frame = getframe(gcf);
-% %         writeVideo(accelerationVideo, frame);  % Write to acceleration video
-% %         close(gcf);  % Close the figure to save memory
-% end
-
-% if i==1|floor(nsteps*i/nt)>floor(nsteps*(i-1)/nt)
-%     % Create surf plot
-% %     clf
-%     surf(X, Y, U_mag, 'EdgeColor', 'none'); % Surface plot of velocity magnitude
-%     colormap jet
-%     colorbar; % Add colorbar to indicate magnitude
-%     axis equal; % Ensure equal scaling for axes
-%     title(sprintf('Velocity Magnitude at t = %0.2g', i * dt)); % Add a title
-%     xlabel('x'); ylabel('y'); zlabel('Velocity Magnitude'); % Label axes
-%     view(2); % View from the top (2D)
-%     drawnow; % Update plot
-% end
+if i==1|floor(nsteps*i/nt)>floor(nsteps*(i-1)/nt)
+    % Create surf plot
+%     clf
+    surf(X, Y, U_mag, 'EdgeColor', 'none'); % Surface plot of velocity magnitude
+    colormap jet
+    colorbar; % Add colorbar to indicate magnitude
+    axis equal; % Ensure equal scaling for axes
+    xlabel('x'); ylabel('y'); zlabel('Velocity Magnitude'); % Label axes
+    view(2); % View from the top (2D)
+    drawnow; % Update plot
+end
 
 end
 
-Time = 0:0.001:1000; 
-plot(Time(1:length(PMPG)), PMPG)
-% ylim([5 15])
-xlabel('Time (s)')
-ylabel('$\mathcal{A}$', 'Interpreter','latex')
-close(velocityVideo);
-close(accelerationVideo);
 
-%%
-% Define starting points for particles
-[startX, startY] = meshgrid(linspace(0,1,20), linspace(0,1,20)); % 20x20 grid
-
-% Plot flow pathlines (steady flow)
-figure;
-streamline(X, Y, U, V, startX, startY)
-axis equal
-xlabel('X'); ylabel('Y')
-title('Flow Pathlines')
-grid on
