@@ -1,94 +1,113 @@
-clc; clear
+%% 
+clc; clear; close all
 
-% Grid size
-n = 200; % nxn grid
-n_points = n^2; % Total grid points
-n_vars = 2 * n_points; % u and v variables for each point
-% Problem parameters
-dx = 1; % Grid spacing in x
-dy = 1; % Grid spacing in y
+%% fixed pars:
+load constraintsFD.mat
+nx = 100;
+ny = 100; 
+n = 101; 
+tf = 1; 
+dt = 0.001; 
+lx = 1; 
+ly = 1; 
+nsteps = 20; 
+Re = 1e2; 
+n_vars = n^2*2;
+courant = 2.0;
+%-----------------------------------------------------------------------
+nt = ceil(tf/dt); dt = tf/nt;
+x = linspace(0,lx,nx+1); hx = lx/nx;
+y = linspace(0,ly,ny+1); hy = ly/ny;
+[X,Y] = meshgrid(y,x);
+h = lx/nx; 
+%-----------------------------------------------------------------------
+nu = 1/Re; 
+U = zeros(n); V = zeros(n); 
+C0 = 15; 
+U(n, :) = 1 ;% - ((cosh(C0.*(X(end, :) - 0.5)))/(cosh(0.5*C0)));
+x0 = [];
 
-%%
-% divergence constraint
-A_cont = sparse(0, n_vars); % sparse representation 
-b_cont = []; % Right-hand side (zeros)
+% plot(X(end, :), U(end, :))
 
-% Loop over interior points (excluding boundaries)
-for i = 1:n-1
-    for j = 1:n-1
-        row = zeros(1, n_vars); % Initialize row for this equation
-        % mid point difference
-        row((i-1)*n + (j + 1)) = 1 / dx; % u(i+1,j)
-        row((i-1)*n + (j )) = -1 / dx; % u(i,j)
-        row(n_points + (i-1)*n + j) = -1 / dy; % v(i,j+1)
-        row(n_points + (i)*n + j) = +1 / dy;   % v(i,j)
-        
-        % Add this row to A_cont
-        A_cont = [A_cont; sparse(row)]; % sparse representation 
-        b_cont = [b_cont; 0]; % RHS is zero
-    end
+% % Define video writer objects
+% velocityVideo = VideoWriter('VelocityVideo_Re100.avi');  % Velocity video file
+% accelerationVideo = VideoWriter('AccelerationVideo_Req100.avi');  % Acceleration video file
+% 
+% % Set frame rate (optional)
+% velocityVideo.FrameRate = 10;
+% accelerationVideo.FrameRate = 10;
+% 
+% % Open video files for writing
+% open(velocityVideo);
+% open(accelerationVideo);
+
+% Define folder paths for saving figures
+velocityFolder = 'velocityMidD_figures';  % Folder for velocity plots
+accelerationFolder = 'accelerationMidD_figures';  % Folder for acceleration plots
+
+% Create folders if they do not exist
+if ~exist(velocityFolder, 'dir')
+    mkdir(velocityFolder);
+end
+if ~exist(accelerationFolder, 'dir')
+    mkdir(accelerationFolder);
 end
 
-disp(['[Size of A_cont]' num2str(size(A_cont))])
-% Boundary constraints
-A_bc_u = sparse(0, n_vars); % Initialize as zero matrix
-A_bc_v = sparse(0, n_vars); % Initialize as zero matrix
+% x0 = zeros(n_vars, 1);
+for i = 1:nt
+disp(['i = ' num2str(i)])
+[Ux, Uy] = gradient(U, h);
+[Vx, Vy] = gradient(V, h);
+[Uxx, ~] = gradient(Ux, h);
+[Vxx, ~] = gradient(Vx, h);
+[~, Uyy] = gradient(Uy, h);
+[~, Vyy] = gradient(Vy, h);
+a = U.*Ux + V.*Uy - nu.*(Uxx + Uyy);
+b = U.*Vx + V.*Vy - nu.*(Vxx + Vyy);
+a = a';
+b = b'; 
+f = 2.*[a(:); b(:)];
 
-% Loop over boundary points
-for i = 1:n
-    for j = 1:n
-        if i == 1 || i == n || j == 1 || j == n % Boundary points
-            % u = 0 (boundary condition for u)
-            row_u = zeros(1, n_vars);
-            row_u((i-1)*n + j) = 1; % u(i,j)
-            A_bc_u = [A_bc_u; sparse(row_u)];
-            % v = 0 (boundary condition for v)
-            row_v = zeros(1, n_vars);
-            row_v(n_points + (i-1)*n + j) = 1; % v(i,j)
-            %A_bc = [A_bc; row_v];
-            A_bc_v = [A_bc_v; sparse(row_v)];
-        end
-    end
+
+%% Solving: 
+options = optimoptions('quadprog','Display', 'none', 'Algorithm', 'interior-point-convex');
+ %'TolFun', 1e-2, 'TolCon', 1e-2
+tic
+[optimal_Ut, fval, exitflag, output, lambda]  = quadprog(2*speye(n_vars), f, [], [], Aeq, beq, [], [], x0, options);
+ans = toc
+ut = optimal_Ut(1: n^2); vt = optimal_Ut(n^2 + 1: end);
+Ut = reshape(ut, n, n)';
+Vt = reshape(vt, n, n)';
+x0 = optimal_Ut;
+Ut_mag = sqrt(Ut.^2 + Vt.^2);
+maxUt(i) = max(Ut_mag(:));
+disp(['Max Ut = ' num2str(maxUt(i))])
+dt(i) = (courant * hx/(maxUt(i)));
+disp(['The time step = ' num2str(dt(i))])
+
+%% compute the pressure gradient integral
+momentum = (Ut + U.*Ux + V.*Uy - nu.*(Uxx + Uyy)).^2 + (Vt + U.*Vx + V.*Vy - nu.*(Vxx + Vyy)).^2; 
+PMPG(i) = h^2*sum(momentum(:));
+%% March in Time and compute a and b.
+U = U + dt(i).* Ut;
+V = V + dt(i).* Vt;
+U_mag = sqrt(U.^2 + V.^2);
+
+if i==1|floor(nsteps*i/nt)>floor(nsteps*(i-1)/nt)
+    % Create surf plot
+%     clf
+    surf(X, Y, U_mag, 'EdgeColor', 'none'); % Surface plot of velocity magnitude
+    colormap jet
+    colorbar; % Add colorbar to indicate magnitude
+    axis equal; % Ensure equal scaling for axes
+    xlabel('x'); ylabel('y'); zlabel('Velocity Magnitude'); % Label axes
+    view(2); % View from the top (2D)
+    drawnow; % Update plot
 end
 
-disp(['[Size of A_bc_u]' num2str(size(A_bc_u))])
-disp(['[Size of A_bc_v]' num2str(size(A_bc_v))])
+end
 
-A_bc = [A_bc_u; A_bc_v];
-Aeq = [A_cont; A_bc]; % Combine the constraints
-beq = zeros(size(Aeq, 1), 1); 
-beq = sparse(beq);
+close(velocityVideo);
+close(accelerationVideo);
 
-save('constraintsFD', 'Aeq', 'beq')
-% A = full(Aeq); 
-% b = full(beq); 
-% 
-% %% Objective function
-% % M = 2 * eye(n_vars); % Diagonal matrix for u and v terms
-% % c = 2 * [a(:); b(:)]; % Vector of coefficients for linear terms
-% 
-% syms_list_u = []; % Initialize for u variables
-% syms_list_v = []; % Initialize for v variables
-% 
-% 
-% % Generate u variables
-% for i = 1:n
-%     for j = 1:n
-%         syms(sprintf('u%d%d', i, j)); % Dynamically create symbolic variables
-%         syms_list_u = [syms_list_u; sym(sprintf('u%d%d', i, j))];
-%     end
-% end
-% 
-% % Generate v variables
-% for i = 1:n
-%     for j = 1:n
-%         syms(sprintf('v%d%d', i, j)); % Dynamically create symbolic variables
-%         syms_list_v = [syms_list_v; sym(sprintf('v%d%d', i, j))];
-%     end
-% end
-% 
-% % Combine into one vector if needed
-% syms_vector = [syms_list_u; syms_list_v];
-% 
-% constraints = A * syms_vector
-% 
+
